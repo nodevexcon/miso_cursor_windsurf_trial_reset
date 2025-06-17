@@ -1,0 +1,67 @@
+{
+  "applications": {
+    "codeium": {
+      "name": "Codeium",
+      "paths": {
+        "win32": [
+          "%APPDATA%\\Code",
+          "%LOCALAPPDATA%\\Programs\\Microsoft VS Code",
+          "%USERPROFILE%\\.vscode",
+          "%USERPROFILE%\\AppData\\Roaming\\Code"
+        ],
+        "darwin": [
+          "~/Library/Application Support/Code",
+          "~/.vscode",
+          "~/Library/Caches/com.microsoft.VSCode"
+        ]
+      },
+      "registry": [
+        "HKCU\\Software\\Codeium",
+        "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Codeium"
+      ]
+    }
+  },
+  "genericPaths": {
+    "win32": [
+      "%LOCALAPPDATA%\\Google\\Chrome\\User Data",
+      "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data",
+      "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data",
+      "%APPDATA%\\Mozilla\\Firefox\\Profiles",
+      "%LOCALAPPDATA%\\Discord",
+      "%LOCALAPPDATA%\\slack",
+      "%TEMP%",
+      "%WINDIR%\\Prefetch",
+      "%USERPROFILE%\\AppData\\Local\\Temp"
+    ],
+    "darwin": [
+      "~/Library/Application Support/Google/Chrome",
+      "~/Library/Application Support/Microsoft Edge",
+      "~/Library/Application Support/BraveSoftware/Brave-Browser",
+      "~/Library/Application Support/Firefox",
+      "~/Library/Caches",
+      "/Library/Caches"
+    ]
+  },
+  "win32": {
+    "registryKeys": [
+      "HKLM\\SOFTWARE\\Microsoft\\Cryptography",
+      "HKCU\\Software\\Microsoft\\SQMClient",
+      "HKLM\\SOFTWARE\\Microsoft\\SQMClient",
+      "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Diagnostics",
+      "HKCU\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\MuiCache"
+    ],
+    "timezones": [
+      "Tokyo Standard Time", 
+      "Singapore Standard Time", 
+      "India Standard Time", 
+      "GMT Standard Time"
+    ]
+  },
+  "darwin": {
+    "systemLogs": [
+      "/private/var/log/*",
+      "~/Library/Logs/*",
+      "/Library/Logs/*"
+    ]
+  }
+} 

@@ -1,0 +1,14 @@
+# System Files
+.DS_Store
+*.log
+
+# Dependencies
+/node_modules
+
+# Build output
+/dist
+/dist-electron
+
+# IDE
+.idea
+.vscode 
