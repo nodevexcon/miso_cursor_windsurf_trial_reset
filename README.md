@@ -1,6 +1,91 @@
-# MISO_Cursor_WindSurf Trial Resetter
+<div align="center">
+  <img src="build/icon.png" alt="MISO Cursor WindSurf Trial Resetter Logo" width="150">
+  <h1>MISO_Cursor_WindSurf Trial Resetter</h1>
+  <p>
+    An application designed to reset software trial periods by deeply cleaning leftover files and registry entries on Windows.
+  </p>
+  <p>
+    <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version">
+    <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
+    <img src="https://img.shields.io/badge/platform-Windows-informational.svg" alt="Platform">
+    <img src="https://img.shields.io/badge/made%20with-Electron%20%26%20React-cyan.svg" alt="Made with Electron & React">
+  </p>
+</div>
 
-Bu uygulama, yazılımların deneme sürümlerini sıfırlamanıza yardımcı olmak için geliştirilmiştir. Sisteminizde bir uygulamaya ait geride kalmış dosyaları ve Windows Kayıt Defteri (Registry) girdilerini bularak ve bunları temizleyerek çalışır. Bu sayede, deneme süresi dolan yazılımları tekrar deneme süresiyle kullanmanıza olanak tanır.
+---
+
+<details>
+<summary><strong>🇬🇧 English Readme</strong></summary>
+<br>
+
+## ✨ Features
+
+- **Application Remnant Cleaner:** Finds all related files and registry keys on your system by simply dragging and dropping an application's `.exe` file.
+- **Smart Filtering:** Analyzes the publisher based on file paths and registry keys to filter out irrelevant results (e.g., Windows system files), preventing accidental deletion of critical data.
+- **Deep Scan:** Thoroughly scans common application installation locations like `Program Files`, `%APPDATA%`, `%LOCALAPPDATA%`, as well as the Windows Registry.
+- **User-Friendly:** Designed with an intuitive interface that anyone can use without requiring technical expertise.
+
+## 🚀 How to Reset a Trial Version
+
+For a successful reset, it is crucial to follow the steps below **in order and completely**.
+
+### Step 1: Apply Trial Resetter Settings
+
+First, we will perform the basic reset operations within the application itself.
+
+1.  Run the application and switch to the **Trial Resetter** view from the left menu.
+2.  Use the **"Basic"** and **"Advanced"** options on this screen to perform the necessary reset operations. These steps clear known trial keys and settings.
+
+### Step 2: Deep Clean Application Remnants
+
+Now, we will perform a deep clean of the "remember me" notes that the software keeps on your computer.
+
+1.  Switch to the **App Cleaner** view from the left menu.
+2.  Find the main executable file (`.exe`) of the software you want to reset (usually located under `C:\Program Files\...`).
+3.  Drag and drop this `.exe` file into the **"Drop .exe here"** area in the application.
+4.  The application will automatically start scanning and list all associated files and registry entries.
+5.  Once the scan is complete, ensure all found items are selected and confirm the deletion by clicking the **"Delete Selected Items"** button.
+
+### Step 3: Change Your IP Address (Important!)
+
+Some software links the license not only to your computer but also to your internet (IP) address. Therefore, you need to change your IP address after cleaning the remnants.
+
+- **Use a VPN:** The easiest and most effective method is to use a VPN service. Activate the VPN and connect to a different country or city.
+- **Reset Your Modem:** If you have a dynamic IP address, turning your internet modem off, waiting for 30 seconds, and then turning it back on will usually get you a new IP address.
+
+### Step 4: Enjoy!
+
+After completing all the steps above, you can restart the software you wanted to reset. It will behave as if it has never been installed before, and your trial period will be reset.
+
+## 🛠️ Development Environment Setup
+
+If you want to run or develop the project on your local machine:
+
+```bash
+# Clone the project
+git clone <your_project_url>
+
+# Navigate to the directory
+cd trial_resetter
+
+# Install the necessary packages
+npm install
+
+# Start the development server
+npm run dev
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to open a pull request or create an issue.
+
+</details>
+
+<br>
+
+<details>
+<summary><strong>🇹🇷 Türkçe Readme</strong></summary>
+<br>
 
 ## ✨ Özellikler
 
@@ -61,4 +146,6 @@ npm run dev
 
 ## 🤝 Katkıda Bulunma
 
-Katkılarınızı bekliyoruz! Lütfen bir pull request açmaktan veya issue oluşturmaktan çekinmeyin. 
+Katkılarınızı bekliyoruz! Lütfen bir pull request açmaktan veya issue oluşturmaktan çekinmeyin.
+
+</details> 
