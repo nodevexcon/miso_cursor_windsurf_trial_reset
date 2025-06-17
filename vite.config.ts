@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
-import * as path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -14,10 +13,22 @@ export default defineConfig({
       {
         entry: 'electron/preload.ts',
         onstart(options) {
-          // Preload-Scripts build'i tamamlandığında Renderer-Process'e sayfayı yeniden yüklemesini bildirir.
+          // Notify the Renderer-Process to reload the page when the Preload-Scripts build is complete.
           options.reload()
         },
-      }
+      },
     ]),
   ],
-}) 
+  build: {
+    rollupOptions: {
+      input: {
+        main: 'electron/main.ts',
+        preload: 'electron/preload.ts',
+        search_worker: 'electron/core/search.worker.ts',
+        reset_worker: 'electron/core/reset.worker.ts',
+        metadata_worker: 'electron/core/metadata.worker.ts',
+        app_cleaner: 'electron/core/app.cleaner.ts'
+      }
+    }
+  }
+})

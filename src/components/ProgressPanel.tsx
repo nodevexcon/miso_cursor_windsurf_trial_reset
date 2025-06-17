@@ -1,81 +1,47 @@
-import React, { useRef, useEffect } from 'react';
-import { useStore, LogEntry } from '../store';
-import { CheckCircle, AlertTriangle, XCircle, Info, ChevronRight, Download } from 'lucide-react';
+import React from 'react';
+import { useStore } from '../store';
+import { CheckCircle, XCircle, AlertCircle, Info } from 'lucide-react';
 
-const LogIcon = ({ level }: { level: LogEntry['level'] }) => {
-  switch (level) {
-    case 'success': return <CheckCircle className="text-green-400" size={16} />;
-    case 'error': return <XCircle className="text-red-400" size={16} />;
-    case 'warn': return <AlertTriangle className="text-yellow-400" size={16} />;
-    default: return <Info className="text-blue-400" size={16} />;
-  }
+const levelConfig = {
+    info: { icon: Info, color: 'text-blue-400' },
+    success: { icon: CheckCircle, color: 'text-green-400' },
+    error: { icon: XCircle, color: 'text-red-400' },
+    warn: { icon: AlertCircle, color: 'text-yellow-400' },
 };
 
-const LogLine = ({ log }: { log: LogEntry }) => (
-  <div className="flex items-start text-sm font-mono">
-    <div className="flex-shrink-0 w-24 text-gray-500">{log.timestamp}</div>
-    <div className="flex-shrink-0 mr-2"><LogIcon level={log.level} /></div>
-    <div className={`flex-grow ${log.level === 'error' ? 'text-red-300' : 'text-gray-300'}`}>
-      {log.message}
-    </div>
-  </div>
-);
-
 export function ProgressPanel() {
-  const { logs, progress, status } = useStore();
-  const logContainerRef = useRef<HTMLDivElement>(null);
+    const { logs, progress, status } = useStore();
 
-  useEffect(() => {
-    if (logContainerRef.current) {
-      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
-    }
-  }, [logs]);
+    return (
+        <div className="flex flex-col h-full p-6 bg-gray-900">
+            <h2 className="text-2xl font-bold mb-4">Reset Progress</h2>
 
-  const exportLogs = () => {
-    const logContent = logs.map(log => `[${log.timestamp}] [${log.level.toUpperCase()}] ${log.message}`).join('\\n');
-    const blob = new Blob([logContent], { type: 'text/plain;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `trial-resetter-log-${new Date().toISOString()}.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-  
-  const isRunning = status === 'resetting' || status === 'analyzing';
-
-  return (
-    <div className="p-4 flex flex-col h-full">
-      <div className="flex justify-between items-center mb-2">
-        <h2 className="text-xl font-bold text-gray-200">Execution Log</h2>
-        <button onClick={exportLogs} className="flex items-center space-x-1 p-2 bg-gray-600 rounded-md hover:bg-gray-500 text-sm" aria-label="Export Logs">
-          <Download size={16} />
-          <span>Export</span>
-        </button>
-      </div>
-      
-      {/* Log Container */}
-      <div 
-        ref={logContainerRef} 
-        className="flex-grow bg-black/50 rounded-lg p-3 overflow-y-auto font-mono text-xs"
-      >
-        {logs.map((log, index) => <LogLine key={index} log={log} />)}
-        {logs.length === 0 && <div className="text-gray-500">Awaiting execution...</div>}
-      </div>
-
-      {/* Progress Bar */}
-      {(isRunning || status === 'complete') && (
-        <div className="mt-3">
-          <p className="text-sm text-gray-400 mb-1">{progress.message || "Initializing..."}</p>
-          <div className="w-full bg-gray-700 rounded-full h-2.5">
-            <div 
-              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
-              style={{ width: `${progress.total > 0 ? (progress.value / progress.total) * 100 : 0}%` }}
-            ></div>
-          </div>
-          <p className="text-right text-sm text-gray-500 mt-1">{progress.value} / {progress.total}</p>
+            <div className="w-full bg-gray-700 rounded-full h-4 mb-4">
+                <div 
+                    className="bg-green-600 h-4 rounded-full transition-all duration-500"
+                    style={{ width: `${progress.total > 0 ? (progress.value / progress.total) * 100 : 0}%` }}
+                ></div>
+            </div>
+            <div className="text-center mb-4">
+                <p className="text-lg font-semibold">{status === 'complete' ? 'Reset Complete!' : progress.message}</p>
+                <p className="text-sm text-gray-400">({progress.value} / {progress.total} tasks completed)</p>
+            </div>
+            
+            <div className="flex-grow bg-black bg-opacity-50 rounded-lg p-4 overflow-y-auto font-mono text-sm">
+                {logs.map((log, index) => {
+                    const config = levelConfig[log.level] || levelConfig.info;
+                    const Icon = config.icon;
+                    return (
+                        <div key={index} className={`flex items-start mb-2 ${config.color}`}>
+                            <Icon className="h-4 w-4 mr-3 mt-0.5 flex-shrink-0" />
+                            <span className="flex-1 whitespace-pre-wrap break-words">
+                                <span className="text-gray-500 mr-2">{log.timestamp}</span>
+                                {log.message}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
         </div>
-      )}
-    </div>
-  );
+    );
 } 

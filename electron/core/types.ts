@@ -9,14 +9,14 @@ export interface IApplication {
 }
 
 export interface IResetter {
-  createTasks(options: string[], application: IApplication): ITask[];
+  createTasks(options: string[], application: IApplication, onLog: (message: string) => void): Promise<ITask[]>;
+  smartScan(): Promise<IFinding[]>;
 }
 
 export interface IFinding {
-    category: string;
+    type: 'file' | 'directory' | 'registry';
     path: string;
-    size: number;
-    formattedSize: string;
+    // size?: number; // Size might not be applicable for all types (like registry)
 }
 
 export interface IAnalyzer {
@@ -24,7 +24,7 @@ export interface IAnalyzer {
 }
 
 export interface IFoundItem {
-    type: 'file' | 'registry';
+    type: 'file' | 'directory' | 'registry';
     path: string;
     description: string;
 }

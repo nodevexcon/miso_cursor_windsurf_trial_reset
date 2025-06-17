@@ -1,21 +1,21 @@
-import { BrowserWindow } from 'electron';
-import * as os from 'os';
 import { IResetter } from './types';
 import { WindowsResetter } from '../platforms/windows.resetter';
-import { MacResetter } from '../platforms/macos.resetter';
+import { MacosResetter } from '../platforms/macos.resetter';
+import { LinuxResetter } from '../platforms/linux.resetter';
 
 /**
  * Creates a platform-specific resetter instance based on the current OS.
- * @param mainWindow The main Electron window.
  * @returns An object conforming to the IResetter interface.
  */
-export function createResetter(mainWindow: BrowserWindow): IResetter {
-  switch (os.platform()) {
+export function createResetter(): IResetter {
+  switch (process.platform) {
     case 'win32':
-      return new WindowsResetter(mainWindow);
+      return new WindowsResetter();
     case 'darwin':
-      return new MacResetter(mainWindow);
+      return new MacosResetter();
+    case 'linux':
+      return new LinuxResetter();
     default:
-      throw new Error(`Unsupported platform: ${os.platform()}`);
+      throw new Error(`Unsupported platform: ${process.platform}`);
   }
 } 

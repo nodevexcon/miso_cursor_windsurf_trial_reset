@@ -4,12 +4,17 @@ import * as os from 'os';
 import * as path from 'path';
 import { execCommand, sendToRenderer } from './command.runner';
 
+function log(level: 'info' | 'warn' | 'error', message: string) {
+  // In the future, this will send logs to the main window
+  console[level](message);
+}
+
 /**
  * Expands environment variables in a path string.
  * @param filePath The path to expand.
  * @returns The expanded path.
  */
-export const expandPath = (filePath: string): string => {
+export function expandPath(filePath: string): string {
   if (os.platform() === 'win32') {
     return filePath.replace(/%([^%]+)%/g, (_, envVar) => process.env[envVar] || '');
   }
@@ -17,29 +22,36 @@ export const expandPath = (filePath: string): string => {
     return path.join(os.homedir(), filePath.slice(1));
   }
   return filePath;
-};
+}
 
 /**
  * Deletes a path (file or directory), logging the action.
- * @param mainWindow The main browser window for logging.
- * @param pathToDelete The path to delete.
+ * @param targetPath The path to delete.
  */
-export async function deletePath(mainWindow: BrowserWindow, pathToDelete: string) {
+export async function deletePath(targetPath: string): Promise<void> {
+  const fullPath = expandPath(targetPath);
+
   try {
-    const expandedPath = expandPath(pathToDelete);
-    if (await fs.pathExists(expandedPath)) {
-      // Simple rollback: move to trash instead of deleting permanently.
-      // For a more robust solution, consider a dedicated trash library.
-      await fs.move(expandedPath, path.join(os.tmpdir(), `trial-resetter-backup-${Date.now()}-${path.basename(expandedPath)}`));
-      sendToRenderer(mainWindow, { type: 'log', level: 'success', message: `Deleted: ${expandedPath}` });
-    } else {
-      sendToRenderer(mainWindow, { type: 'log', level: 'info', message: `Skipped (not found): ${expandedPath}` });
+    if (!await fs.pathExists(fullPath)) {
+      log('info', `Path does not exist, skipping deletion: ${fullPath}`);
+      return;
     }
+
+    log('info', `Deleting path: ${fullPath}`);
+    await fs.remove(fullPath);
+    log('info', `Successfully deleted: ${fullPath}`);
   } catch (error: any) {
-    sendToRenderer(mainWindow, { type: 'log', level: 'error', message: `Failed to delete ${pathToDelete}: ${error.message}` });
-    // Attempt deletion with sudo on permission errors for macOS
-    if (os.platform() === 'darwin' && error.code === 'EACCES') {
-      await execCommand(mainWindow, 'rm', ['-rf', pathToDelete], true);
+    log('error', `Error deleting path ${fullPath}. Attempting with sudo.`);
+    try {
+      // Platform-specific commands for deletion
+      const command = process.platform === 'win32' 
+        ? `rmdir /s /q "${fullPath}"` 
+        : `rm -rf "${fullPath}"`;
+      await execCommand(command, [], true);
+      log('info', `Successfully deleted with sudo: ${fullPath}`);
+    } catch (sudoError: any) {
+      log('error', `Failed to delete with sudo ${fullPath}: ${sudoError.message}`);
+      throw sudoError; // Re-throw the error after logging
     }
   }
 }
@@ -87,14 +99,19 @@ export function formatBytes(bytes: number, decimals = 2) {
 
 /**
  * Deletes a registry key.
- * @param mainWindow The main browser window for logging.
  * @param key The registry key to delete.
  */
-export async function deleteRegKey(mainWindow: BrowserWindow, key: string) {
-  try {
-    await execCommand(mainWindow, `REG`, ['DELETE', key, '/f'], true);
-    sendToRenderer(mainWindow, { type: 'log', level: 'success', message: `Deleted Registry Key: ${key}` });
-  } catch (error: any) {
-    sendToRenderer(mainWindow, { type: 'log', level: 'error', message: `Failed to delete registry key ${key}: ${error.message}` });
-  }
+export async function deleteRegKey(key: string): Promise<void> {
+    if (process.platform !== 'win32') {
+        log('warn', `Registry operations are only supported on Windows. Skipping key: ${key}`);
+        return;
+    }
+    log('info', `Deleting registry key: ${key}`);
+    try {
+        await execCommand('reg', ['delete', key, '/f'], true);
+        log('info', `Successfully deleted registry key: ${key}`);
+    } catch (error: any) {
+        log('error', `Failed to delete registry key ${key}: ${error.message}`);
+        throw error;
+    }
 } 

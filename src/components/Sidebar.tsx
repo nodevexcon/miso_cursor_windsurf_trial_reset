@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
-import { ChevronDown, Trash2, Save } from 'lucide-react';
+import { ChevronDown, Trash2, Save, Moon, Sun } from 'lucide-react';
 
 export function Sidebar() {
   const { 
@@ -14,7 +14,9 @@ export function Sidebar() {
     deleteProfile,
     profiles,
     activeView,
-    setView
+    setView,
+    theme,
+    toggleTheme,
   } = useStore();
   
   const [profileName, setProfileName] = useState('');
@@ -121,6 +123,21 @@ export function Sidebar() {
           </div>
         </>
       )}
+
+      {/* Spacer to push content to the bottom */}
+      <div className="flex-grow"></div>
+
+      {/* Theme Toggle Button */}
+      <div className="pt-4 border-t border-gray-700">
+        <button
+          onClick={toggleTheme}
+          className="w-full flex items-center justify-center p-2 rounded-md transition-colors bg-gray-700 hover:bg-gray-600"
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? <Sun className="mr-2" size={20} /> : <Moon className="mr-2" size={20} />}
+          <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+        </button>
+      </div>
     </div>
   );
 } 

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ProgressPayload } from './electron.d';
+import type { IFoundItem } from '../electron/core/types';
 
 // #region: Types
 export interface TargetApplication {
@@ -13,8 +14,8 @@ export interface ResetOption {
   label: string;
   details: string;
   checked: boolean;
-  platforms: ('win32' | 'darwin')[];
-  category: 'Basic' | 'Advanced';
+  platforms: ('win32' | 'darwin' | 'linux')[];
+  category: 'Basic' | 'Advanced' | 'System';
 }
 
 export interface LogEntry {
@@ -29,8 +30,8 @@ export interface Profile {
   options: { [key: string]: boolean };
 }
 
-type AppStatus = 'idle' | 'analyzing' | 'resetting' | 'complete' | 'error';
-type AppView = 'resetter' | 'cleaner';
+type WorkflowStep = 'selection' | 'analyzing' | 'review' | 'executing' | 'complete';
+type Theme = 'light' | 'dark';
 
 export interface AppState {
   // Static Data
@@ -38,13 +39,11 @@ export interface AppState {
   supportedApps: TargetApplication[];
   allOptions: ResetOption[];
   
-  // App Status
-  status: AppStatus;
-  activeView: AppView;
+  // Workflow Status
+  workflowStep: WorkflowStep;
   
   // User Selections
-  selectedApp: TargetApplication;
-  activeCategory: 'Basic' | 'Advanced';
+  selectedApp: TargetApplication | null;
   
   // Runtime Data
   logs: LogEntry[];
@@ -53,22 +52,29 @@ export interface AppState {
     total: number;
     message: string;
   };
+  foundItems: IFoundItem[];
+  selectedItems: Set<string>;
 
-  // Profiles
+  // Profiles & Theme
   profiles: Profile[];
+  theme: Theme;
 
   // Actions
   initialize: (platform: 'win32' | 'darwin' | 'linux' | '') => void;
-  setView: (view: AppView) => void;
-  setApp: (app: TargetApplication) => void;
-  setCategory: (category: 'Basic' | 'Advanced') => void;
+  setApp: (app: TargetApplication | null) => void;
+  startAnalysis: (app: TargetApplication) => void;
+  analysisComplete: (items: IFoundItem[]) => void;
   toggleOption: (id: string) => void;
-  startReset: () => void;
+  toggleItemSelection: (path: string) => void;
+  selectAllItems: (select: boolean) => void;
+  startExecution: () => void;
   addLog: (log: Omit<LogEntry, 'timestamp'>) => void;
   handleProgress: (payload: ProgressPayload) => void;
   saveProfile: (name: string) => void;
   loadProfile: (name: string) => void;
   deleteProfile: (name: string) => void;
+  toggleTheme: () => void;
+  resetWorkflow: () => void;
 }
 // #endregion
 
@@ -80,23 +86,15 @@ const supportedApps: TargetApplication[] = [
 ];
 
 const initialOptions: ResetOption[] = [
-    // Basic Options
-    { id: 'cleanAppData', label: 'Clean {APP_NAME} Data', details: 'Removes configuration, caches, and extension data for {APP_NAME}.', checked: true, platforms: ['win32', 'darwin'], category: 'Basic' },
-    { id: 'browserData', label: 'Clean Browser & App Data', details: 'Deletes user data from Chrome, Edge, Firefox, Discord, and Slack.', checked: false, platforms: ['win32', 'darwin'], category: 'Basic' },
-    { id: 'otherCaches', label: 'Clear Other Identifiers and Caches', details: 'Clears system temp folders and prefetch files.', checked: true, platforms: ['win32', 'darwin'], category: 'Basic' },
-    { id: 'networkId', label: 'Reset Network Identity', details: 'Flushes DNS cache and renews network configuration.', checked: true, platforms: ['win32', 'darwin'], category: 'Basic' },
-    { id: 'registryCleanup', label: 'Registry Cleanup', details: 'Deletes registry keys related to application usage and identifiers.', checked: true, platforms: ['win32'], category: 'Basic' },
+    // Basic Options (will be shown in review screen)
+    { id: 'cleanAppData', label: 'Uygulama Verilerini Temizle', details: 'Yapılandırma, önbellek ve eklenti verilerini kaldırır.', checked: true, platforms: ['win32', 'darwin', 'linux'], category: 'Basic' },
+    { id: 'deepClean', label: 'Akıllı Derinlemesine Temizlik', details: 'Sistemi ek artık dosyalar ve kayıt defteri anahtarları için tarar.', checked: true, platforms: ['win32', 'darwin', 'linux'], category: 'Advanced' },
     
-    // Advanced Options
-    { id: 'macAddress', label: 'Randomize MAC Addresses', details: 'Changes the hardware address of network adapters. May require a reboot.', checked: false, platforms: ['win32', 'darwin'], category: 'Advanced' },
-    { id: 'hostname', label: 'Randomize Computer Name', details: 'Assigns a new random hostname to the computer. Requires a reboot.', checked: false, platforms: ['win32', 'darwin'], category: 'Advanced' },
-    { id: 'machineId', label: 'Change Machine GUID', details: 'Generates a new machine GUID in the registry.', checked: true, platforms: ['win32'], category: 'Advanced' },
-    { id: 'systemSettings', label: 'Modify System Settings', details: 'Randomly changes the system timezone to a new value.', checked: false, platforms: ['win32'], category: 'Advanced' },
-    { id: 'telemetry', label: 'Disable Telemetry', details: 'Disables Windows data collection and telemetry services.', checked: true, platforms: ['win32'], category: 'Advanced' },
-    { id: 'installId', label: 'Randomize Installation ID', details: 'Changes the recorded installation date of Windows.', checked: false, platforms: ['win32'], category: 'Advanced'},
-    { id: 'volumeId', label: 'Change Volume ID (Requires VolumeID.exe)', details: 'Changes the serial number of the C: drive. You must place VolumeID.exe from Sysinternals in a `bin` folder next to the application.', checked: false, platforms: ['win32'], category: 'Advanced' },
-    { id: 'wmiReset', label: 'Reset WMI Repository', details: 'Resets the Windows Management Instrumentation database. This is an aggressive option that may affect other applications.', checked: false, platforms: ['win32'], category: 'Advanced' },
-    { id: 'systemLogs', label: 'Clear System-Level Logs', details: 'Deletes advanced logs like Windows Error Reporting and app usage databases.', checked: false, platforms: ['win32', 'darwin'], category: 'Advanced' },
+    // System-level options
+    { id: 'networkId', label: 'Ağ Kimliğini Sıfırla', details: 'DNS önbelleğini temizler ve ağ yapılandırmasını yeniler.', checked: true, platforms: ['win32', 'darwin'], category: 'System' },
+    { id: 'registryCleanup', label: 'Genel Kayıt Defteri Temizliği', details: 'Genel uygulama kullanım kimlikleriyle ilgili kayıt defteri anahtarlarını siler.', checked: true, platforms: ['win32'], category: 'System' },
+    { id: 'machineId', label: 'Makine GUID Değiştir', details: 'Kayıt defterinde yeni bir makine GUID\'i oluşturur.', checked: true, platforms: ['win32'], category: 'System' },
+    { id: 'telemetry', label: 'Telemetriyi Devre Dışı Bırak', details: 'Windows veri toplama ve telemetri hizmetlerini devre dışı bırakır.', checked: true, platforms: ['win32'], category: 'System' },
 ];
 // #endregion
 
@@ -107,26 +105,52 @@ export const useStore = create<AppState>()(
       platform: '',
       supportedApps,
       allOptions: initialOptions,
-      status: 'idle',
-      activeView: 'resetter',
-      selectedApp: supportedApps[0],
-      activeCategory: 'Basic',
+      workflowStep: 'selection',
+      selectedApp: null,
       logs: [],
       progress: { value: 0, total: 0, message: '' },
+      foundItems: [],
+      selectedItems: new Set(),
       profiles: [],
+      theme: 'dark',
 
       // Actions
-      initialize: (platform: 'win32' | 'darwin' | 'linux' | '') => set({ platform }),
-      setView: (view: AppView) => set({ activeView: view }),
-      setApp: (app: TargetApplication) => set({ selectedApp: app }),
-      setCategory: (category: 'Basic' | 'Advanced') => set({ activeCategory: category }),
-      toggleOption: (id: string) => set((state) => ({
+      initialize: (platform) => set({ platform }),
+      setApp: (app) => set({ selectedApp: app }),
+      startAnalysis: (app) => set({ 
+        workflowStep: 'analyzing',
+        selectedApp: app,
+        logs: [],
+        foundItems: [],
+        selectedItems: new Set(),
+        progress: { value: 0, total: 0, message: `'${app.name}' için analiz başlatılıyor...` }
+      }),
+      analysisComplete: (items) => set((state) => ({
+        workflowStep: 'review',
+        foundItems: items,
+        selectedItems: new Set(items.map(i => i.path)), // Select all by default
+        progress: { ...state.progress, message: `Analiz tamamlandı. ${items.length} öğe bulundu.`}
+      })),
+      toggleOption: (id) => set((state) => ({
         allOptions: state.allOptions.map(opt => 
           opt.id === id ? { ...opt, checked: !opt.checked } : opt
         )
       })),
-      startReset: () => set({ status: 'resetting', logs: [], progress: { value: 0, total: 0, message: '' } }),
-      addLog: (log: Omit<LogEntry, 'timestamp'>) => set((state) => ({
+      toggleItemSelection: (path) => set(state => {
+        const newSet = new Set(state.selectedItems);
+        if (newSet.has(path)) newSet.delete(path);
+        else newSet.add(path);
+        return { selectedItems: newSet };
+      }),
+      selectAllItems: (select) => set(state => ({
+        selectedItems: select ? new Set(state.foundItems.map(i => i.path)) : new Set()
+      })),
+      startExecution: () => set({ 
+        workflowStep: 'executing', 
+        logs: [], 
+        progress: { value: 0, total: 0, message: 'Sıfırlama işlemi başlatılıyor...' } 
+      }),
+      addLog: (log) => set((state) => ({
         logs: [...state.logs, { ...log, timestamp: new Date().toLocaleTimeString() }]
       })),
       handleProgress: (payload: ProgressPayload) => {
@@ -136,39 +160,28 @@ export const useStore = create<AppState>()(
         } else if (payload.type === 'progress' && payload.total) {
             set({ progress: { value: payload.progress, total: payload.total, message: payload.message } });
         } else if (payload.type === 'complete') {
-            set({ status: 'complete', progress: { ...state.progress, value: state.progress.total, message: 'Process finished.' } });
+            set({ workflowStep: 'complete', progress: { ...state.progress, value: state.progress.total, message: 'İşlem tamamlandı.' } });
         } else if (payload.type === 'error') {
             state.addLog({ message: payload.message, level: 'error' });
-            set({ status: 'error' });
+            set({ workflowStep: 'review' }); // Revert to review step on error
         }
       },
-      saveProfile: (name: string) => {
-        if (!name.trim()) return;
-        const { selectedApp, allOptions, profiles } = get();
-        const newProfile: Profile = {
-          name: name.trim(),
-          selectedAppId: selectedApp.id,
-          options: allOptions.reduce((acc, option) => ({ ...acc, [option.id]: option.checked }), {} as { [key: string]: boolean }),
-        };
-        const updatedProfiles = [...profiles.filter(p => p.name !== newProfile.name), newProfile];
-        set({ profiles: updatedProfiles });
-      },
-      loadProfile: (name: string) => {
-        const { profiles, supportedApps, allOptions } = get();
-        const profile = profiles.find(p => p.name === name);
-        if (!profile) return;
-        set({
-          selectedApp: supportedApps.find(app => app.id === profile.selectedAppId) || supportedApps[0],
-          allOptions: allOptions.map(opt => ({ ...opt, checked: profile.options[opt.id] ?? opt.checked })),
-        });
-      },
-      deleteProfile: (name: string) => {
-        set((state) => ({ profiles: state.profiles.filter(p => p.name !== name) }));
-      }
+      saveProfile: (name: string) => { /* ... to be implemented ... */ },
+      loadProfile: (name: string) => { /* ... to be implemented ... */ },
+      deleteProfile: (name: string) => set((state) => ({ profiles: state.profiles.filter(p => p.name !== name) })),
+      toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
+      resetWorkflow: () => set({
+        workflowStep: 'selection',
+        selectedApp: null,
+        foundItems: [],
+        selectedItems: new Set(),
+        logs: [],
+        progress: { value: 0, total: 0, message: '' }
+      }),
     }),
     {
-      name: 'trial-resetter-storage', // local storage key
-      partialize: (state) => ({ profiles: state.profiles }), // only persist profiles
+      name: 'trial-resetter-storage-v2', // Changed key to avoid conflicts with old structure
+      partialize: (state) => ({ profiles: state.profiles, theme: state.theme }),
     }
   )
 ); 

@@ -5,8 +5,8 @@ contextBridge.exposeInMainWorld('electron', {
   executeReset: (options: string[], application: IApplication): Promise<void> =>
     ipcRenderer.invoke('reset:execute', options, application),
 
-  analyzeActions: (options: string[], application: IApplication): Promise<any[]> =>
-    ipcRenderer.invoke('analysis:execute', options, application),
+  analyzeActions: (application: IApplication): Promise<any[]> =>
+    ipcRenderer.invoke('analysis:execute', application),
 
   getExeMetadata: (filePath: string): Promise<any> =>
     ipcRenderer.invoke('app-cleaner:get-exe-metadata', filePath),

@@ -1,13 +1,23 @@
 import { BrowserWindow } from 'electron';
 import { exec, execFile } from 'child_process';
 import type { ProgressPayload } from '../../src/electron.d';
-import { quote } from 'shell-quote';
+import * as shellQuote from 'shell-quote';
 import logger from './logger';
-const sudo = require('sudo-prompt');
+import sudo from 'sudo-prompt';
+import { spawn } from 'child_process';
 
 // Helper to send structured updates to the renderer process
 export function sendToRenderer(mainWindow: BrowserWindow, data: ProgressPayload) {
   mainWindow.webContents.send('reset-progress', data);
+}
+
+const sudoOptions = {
+  name: 'Trial Resetter',
+};
+
+function log(message: string) {
+  // In the future, this will send logs to the main window
+  console.log(message);
 }
 
 /**
@@ -20,44 +30,50 @@ export function sendToRenderer(mainWindow: BrowserWindow, data: ProgressPayload)
  * @param suppressErrors If true, suppresses logging for expected errors.
  * @returns A promise that resolves with stdout or rejects with an error.
  */
-export async function execCommand(
-    mainWindow: BrowserWindow, 
-    command: string, 
-    args: string[] = [], 
-    useSudo: boolean = false,
-    suppressErrors: boolean = false
-): Promise<string> {
-    
-    // For complex commands with shell syntax, or any command passed as a single string,
-    // we must use exec, which spawns a shell.
-    const isComplexCommand = args.length === 0;
+export async function execCommand(command: string, args: string[], needsAdmin = false): Promise<string> {
+  log(`Executing command: ${command} ${args.join(' ')}`);
 
-    const fullCommand = isComplexCommand ? command : quote([command, ...args]);
-    
-    return new Promise((resolve, reject) => {
-        const callback = (error: any, stdout: any, stderr: any) => {
-            if (error) {
-                if (!suppressErrors) {
-                    const errorMessage = (stderr || error.message).toString().substring(0, 500);
-                    logger.error(`Exec failed (${fullCommand}): ${errorMessage}`);
-                    sendToRenderer(mainWindow, { type: 'log', level: 'error', message: `Exec failed (${fullCommand}): ${errorMessage}` });
-                }
-                reject(error);
-            } else {
-                logger.info(`Exec OK: ${fullCommand}`);
-                sendToRenderer(mainWindow, { type: 'log', level: 'success', message: `Exec OK: ${fullCommand}` });
-                resolve(stdout.toString());
-            }
-        };
-
-        if (useSudo) {
-            sudo.exec(fullCommand, { name: 'Trial Resetter' }, callback);
-        } else {
-            if (isComplexCommand) {
-                exec(fullCommand, callback);
-            } else {
-                execFile(command, args, callback);
-            }
+  return new Promise((resolve, reject) => {
+    if (needsAdmin) {
+      const fullCommand = shellQuote.quote([command, ...args]);
+      sudo.exec(fullCommand, sudoOptions, (error, stdout, stderr) => {
+        if (error) {
+          log(`Sudo exec error for command "${fullCommand}": ${error.message}`);
+          return reject(error);
         }
-    });
+        if (stderr) {
+          log(`Sudo exec stderr for command "${fullCommand}": ${stderr}`);
+        }
+        log(`Sudo exec stdout for command "${fullCommand}": ${stdout}`);
+        resolve(stdout?.toString() || '');
+      });
+    } else {
+      const process = spawn(command, args, { shell: true });
+      let stdout = '';
+      let stderr = '';
+
+      process.stdout.on('data', (data) => {
+        stdout += data.toString();
+        log(data.toString());
+      });
+
+      process.stderr.on('data', (data) => {
+        stderr += data.toString();
+        log(data.toString());
+      });
+
+      process.on('close', (code) => {
+        if (code !== 0) {
+          log(`Command "${command} ${args.join(' ')}" exited with code ${code}. Stderr: ${stderr}`);
+          return reject(new Error(`Command failed with code ${code}: ${stderr}`));
+        }
+        resolve(stdout);
+      });
+
+      process.on('error', (err) => {
+        log(`Failed to start command: "${command} ${args.join(' ')}". Error: ${err.message}`);
+        reject(err);
+      });
+    }
+  });
 } 

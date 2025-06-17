@@ -2,13 +2,13 @@ import { app, BrowserWindow, ipcMain, IpcMainEvent, IpcMainInvokeEvent } from 'e
 import { Worker } from 'worker_threads';
 import * as path from 'path';
 import * as os from 'os';
-import { IApplication, IFoundItem } from './core/types';
+import * as fs from 'fs/promises';
+import { IApplication, IFoundItem, ExeMetadata } from './core/types';
 import { sendToRenderer } from './utils/command.runner';
 import { getPathSize, formatBytes, expandPath, deletePath, deleteRegKey } from './utils/file.utils';
 import config from '../config.json';
-import { AppCleaner } from './core/app.cleaner';
-import * as fs from 'fs-extra';
-const vsInfo = require('pe-toolkit');
+import { createResetter } from './core/resetter.factory';
+const { parseBytes } = require('pe-toolkit');
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -48,14 +48,69 @@ async function createWindow() {
 
   ipcMain.on('set-title', handleSetTitle);
 
-  ipcMain.handle('reset:execute', async (_: IpcMainInvokeEvent, options: string[], application: IApplication) => {
+  ipcMain.handle('system:smart-scan', async () => {
+    const resetter = createResetter();
+    return resetter.smartScan();
+  });
+
+  ipcMain.handle('analysis:execute', async (_: IpcMainInvokeEvent, application: IApplication) => {
+    if (!mainWindow) return [];
+    const window = mainWindow; // Avoid race conditions on close
+
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(path.join(__dirname, 'core/search.worker.js'), {
+        workerData: { application },
+      });
+
+      worker.on('message', (message) => {
+        // Forward log messages to the renderer for real-time progress
+        if (message.type === 'log') {
+          window.webContents.send('reset-progress', { 
+            type: 'log', 
+            level: message.level, 
+            message: message.message 
+          });
+        } 
+        // When the worker is done, it sends the final result
+        else if (message.type === 'result') {
+          resolve(message.items);
+        }
+        // If the worker sends a specific error
+        else if (message.type === 'error') {
+           window.webContents.send('reset-progress', { type: 'error', message: message.message });
+           reject(new Error(message.message));
+        }
+      });
+
+      worker.on('error', (error) => {
+        window.webContents.send('reset-progress', { type: 'error', message: `Analiz worker'ında kritik bir hata oluştu: ${error.message}` });
+        reject(error);
+      });
+
+      worker.on('exit', (code) => {
+        if (code !== 0) {
+          const errorMessage = `Analiz worker'ı beklenmedik bir şekilde sonlandı (kod: ${code})`;
+          window.webContents.send('reset-progress', { type: 'error', message: errorMessage });
+          reject(new Error(errorMessage));
+        }
+      });
+    });
+  });
+
+  ipcMain.handle('reset:execute', async (
+    _: IpcMainInvokeEvent, 
+    options: { [key: string]: boolean }, 
+    itemsToDelete: IFoundItem[],
+    application: IApplication
+    ) => {
     if (!mainWindow) return;
 
-    sendToRenderer(mainWindow, { type: 'log', level: 'info', message: 'Main process received reset request. Starting worker...' });
+    sendToRenderer(mainWindow, { type: 'log', level: 'info', message: 'Main process received reset request...' });
 
     const worker = new Worker(path.join(__dirname, 'core/reset.worker.js'), {
       workerData: {
         options,
+        itemsToDelete,
         application,
       },
     });
@@ -83,84 +138,49 @@ async function createWindow() {
     });
   });
 
-  ipcMain.handle('analysis:execute', async (_: IpcMainInvokeEvent, options: string[], application: IApplication) => {
-    if (!mainWindow) return [];
-    
-    const findings: any[] = [];
-    if (!application || !application.id) return findings;
+  ipcMain.handle('app-cleaner:get-exe-metadata', async (_: IpcMainInvokeEvent, filePath: string): Promise<ExeMetadata> => {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const worker = new Worker(path.join(__dirname, 'core/metadata.worker.js'), {
+        workerData: { filePath },
+      });
 
-    const appConfig = (config.applications as any)[application.id];
-    if (!appConfig) return findings;
+      const resolveWithFallback = (context: string, error?: any) => {
+        if (resolved) return;
+        resolved = true;
+        console.error(`Metadata worker failed for ${filePath} [${context}]:`, error || 'No error details');
+        const appName = path.basename(filePath, path.extname(filePath));
+        resolve({
+          appName,
+          publisher: 'N/A',
+          details: { ProductName: appName },
+        });
+      };
 
-    if (options.includes('cleanAppData')) {
-      const pathsToAnalyze = process.platform === 'win32' ? appConfig.paths.win32 : appConfig.paths.darwin;
-      if (pathsToAnalyze) {
-        for (const appPath of pathsToAnalyze) {
-          const expandedPath = expandPath(appPath);
-          const size = await getPathSize(expandedPath);
-          if (size > 0) {
-            findings.push({ 
-              category: `${application.name} Data`, 
-              path: expandedPath, 
-              size, 
-              formattedSize: formatBytes(size) 
-            });
-          }
+      worker.on('message', (result) => {
+        if (resolved) return;
+        resolved = true;
+
+        if (result.type === 'success') {
+          const metadataTable = result.metadata;
+          const appName = metadataTable.ProductName || path.basename(filePath, path.extname(filePath));
+          const publisher = metadataTable.CompanyName || 'N/A';
+          resolve({ appName, publisher, details: metadataTable });
+        } else {
+          resolveWithFallback('worker sent error message', result.message);
         }
-      }
-    }
-    return findings;
-  });
+      });
 
-  ipcMain.handle('app-cleaner:get-exe-metadata', async (_: IpcMainInvokeEvent, filePath: string) => {
-    try {
-      const bytes = await fs.readFile(filePath);
-      const results = vsInfo.parseBytes(bytes);
-      if (results.length > 0) {
-        const stringFileInfo = results[0].getStringFileInfo();
-        if (stringFileInfo) {
-          const table = Object.values(stringFileInfo)[0] as any;
-          return {
-            appName: table.ProductName || path.basename(filePath, path.extname(filePath)),
-            publisher: table.CompanyName || 'N/A',
-            details: {
-              ProductName: table.ProductName,
-              CompanyName: table.CompanyName,
-              FileDescription: table.FileDescription,
-              InternalName: table.InternalName,
-              OriginalFilename: table.OriginalFilename,
-            }
-          };
+      worker.on('error', (error) => {
+        resolveWithFallback('worker emitted error event', error);
+      });
+
+      worker.on('exit', (code) => {
+        if (!resolved) {
+          resolveWithFallback(`worker exited with code ${code}`);
         }
-      }
-    } catch (error) {
-      console.error('Failed to parse exe metadata:', error);
-    }
-    const appName = path.basename(filePath, path.extname(filePath));
-    return {
-      appName: appName,
-      publisher: 'N/A',
-      details: {
-        ProductName: appName
-      }
-    };
-  });
-
-  ipcMain.handle('app-cleaner:find-leftovers', async (_: IpcMainInvokeEvent, metadata: any) => {
-    if (!mainWindow) return [];
-    const cleaner = new AppCleaner(mainWindow);
-    return cleaner.findLeftovers(metadata);
-  });
-
-  ipcMain.handle('app-cleaner:delete-items', async (_: IpcMainInvokeEvent, items: IFoundItem[]) => {
-    if (!mainWindow) return;
-    for (const item of items) {
-      if (item.type === 'file') {
-        await deletePath(mainWindow, item.path);
-      } else if (item.type === 'registry') {
-        await deleteRegKey(mainWindow, item.path);
-      }
-    }
+      });
+    });
   });
 }
 
